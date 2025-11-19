@@ -1,9 +1,3 @@
-Siap. Aku akan membuatkan **PRD (Product Requirements Document) PeopleSync – MVP Version** yang **lengkap**, **rapi**, dan **benar-benar berdasarkan seluruh hasil diskusi kita dari awal**: ERD, architecture diagram, sequence, DFD, API schema, roles & permission, soft-delete system, async payroll, attendance offline, PWA, dsb.
-
-PRD ini disusun dengan gaya profesional ala perusahaan (Startup / SaaS / HRIS) dengan struktur yang bisa langsung kamu pakai untuk development, pitching, atau dimasukkan ke repository.
-
----
-
 # 📘 **PRODUCT REQUIREMENTS DOCUMENT (PRD)**
 
 ## **Product Name: PeopleSync**
