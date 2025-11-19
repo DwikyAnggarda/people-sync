@@ -22,22 +22,12 @@ Nuxt (PWA & Admin Web) → API Gateway → Laravel API → Redis (cache + queue)
 
 # 2. **Purpose & Goals**
 
-Membuat MVP HRIS dengan fokus:
+MVP HRIS dengan fokus:
 
 * Sistem absensi yang presisi dan kompatibel dengan mobile offline.
 * Sistem payroll sederhana namun production-ready (async, snapshot, reporting).
 * Role-based access untuk employee, manager, HR, payroll admin, superadmin.
 * Cepat untuk di-deploy, modular, fokus backend yang scalable.
-
-**Non-goals (bukan MVP):**
-
-* Multi-tenant SaaS
-* Shift scheduling
-* Overtime rules
-* Advanced payroll formula builder
-* Performance review
-
----
 
 # 3. **User Types & Roles**
 
@@ -103,7 +93,7 @@ Membuat MVP HRIS dengan fokus:
 
 ### **4.2 Non-functional requirements**
 
-* Tahan N+1 queries (include/expand)
+* Block N+1 queries (include/expand)
 * Asynchronous heavy process (queue)
 * Soft deletes + partial unique index
 * Redis caching untuk read-heavy sections
@@ -404,8 +394,6 @@ Membuat MVP HRIS dengan fokus:
 
 # 9. **MVP Success Criteria**
 
-PeopleSync MVP dianggap berhasil jika:
-
 1. Employee dapat:
 
    * clock-in/out
@@ -441,7 +429,7 @@ PeopleSync MVP dianggap berhasil jika:
 
 # 10. **Roadmap (3 Tahapan)**
 
-### MVP (Saat ini)
+### MVP
 
 ✔ Auth
 ✔ Employees
@@ -476,23 +464,12 @@ PeopleSync MVP dianggap berhasil jika:
 
 # 11. **Appendix**
 
-## 11.1 ERD (soft-delete applied)
-
-*Sudah kita buat di sesi sebelumnya (DBML + PDF + SQL)*
-
-## 11.2 Architecture Diagram
+## 11.1 Architecture Diagram
 
 * PWA + Admin → API Gateway → Laravel API → Redis → Worker → PostgreSQL / S3
 
-## 11.3 Sequence Diagrams
+## 11.2 API Schema
 
-* Attendance Sync
-* Payroll Generation
-  *(sudah kita buat)*
-
-## 11.4 API Schema
-
-* OpenAPI lengkap (sudah dibuat versi panjang)
 * [peoplesync.apidog.io](https://peoplesync.apidog.io/)
 
 ---
