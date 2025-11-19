@@ -1,18 +1,4 @@
-# 📘 **PRODUCT REQUIREMENTS DOCUMENT (PRD)**
-
-## **Product Name: PeopleSync**
-
-## **Version: MVP**
-
-## **Document Type:** Functional + Technical-Aligned PRD
-
-## **Last Updated:** Today
-
----
-
 # 1. **Overview**
-
-### 1.1 What is PeopleSync?
 
 PeopleSync adalah aplikasi **HRIS ringan** yang menyediakan fitur inti HR:
 
