@@ -2,78 +2,93 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Support\Str;
+use Tymon\JWTAuth\Contracts\JWTSubject;
+use Filament\Models\Contracts\FilamentUser;
+use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable
+class User extends Authenticatable implements JWTSubject, FilamentUser
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens;
-    use HasFactory;
-    use Notifiable;
-    use SoftDeletes;
+    use HasFactory, Notifiable, SoftDeletes, HasRoles;
 
-    public $incrementing = false;
-
+    /**
+     * The primary key type.
+     */
     protected $keyType = 'string';
 
+    /**
+     * Disable auto-incrementing for UUID.
+     */
+    public $incrementing = false;
+
+    /**
+     * Mass assignable attributes.
+     */
     protected $fillable = [
+        'name',
         'email',
         'password',
-        'employee_id',
-        'is_active',
     ];
 
+    /**
+     * Hidden attributes for serialization.
+     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
+    /**
+     * Attribute casting.
+     */
     protected $casts = [
-        'is_active' => 'boolean',
-        'password' => 'hashed',
+        'email_verified_at' => 'datetime',
     ];
 
-    public function employee(): BelongsTo
+    protected static function booted()
     {
-        return $this->belongsTo(Employee::class);
+        static::creating(function ($model) {
+            if (! $model->getKey()) {
+                $model->{$model->getKeyName()} = (string) Str::uuid();
+            }
+        });
     }
 
-    public function roles(): BelongsToMany
+    public function getJWTIdentifier()
     {
-        return $this->belongsToMany(Role::class)
-            ->withTimestamps()
-            ->withPivot('id', 'deleted_at');
+        return $this->id; // UUID
     }
 
-    public function activityLogs(): HasMany
+    public function getJWTCustomClaims(): array
     {
-        return $this->hasMany(ActivityLog::class);
+        return []; // identity-only
     }
 
-    public function notifications(): HasMany
+    public function canAccessPanel(\Filament\Panel $panel): bool
     {
-        return $this->hasMany(Notification::class);
+        return $this->roles()
+            ->where('name', 'admin')
+            ->exists();
     }
 
-    public function approvedLeaves(): HasMany
+    /**
+     * Roles (RBAC).
+     */
+    public function roles()
     {
-        return $this->hasMany(Leave::class, 'approved_by');
+        return $this->belongsToMany(Role::class, 'user_roles');
     }
 
-    public function payrollJobs(): HasMany
+    /**
+     * Linked employee (optional).
+     */
+    public function employee()
     {
-        return $this->hasMany(PayrollJob::class);
-    }
-
-    public function attendanceImportJobs(): HasMany
-    {
-        return $this->hasMany(AttendanceImportJob::class);
+        return $this->hasOne(Employee::class);
     }
 }

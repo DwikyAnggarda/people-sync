@@ -9,21 +9,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Role extends Model
 {
     /** @use HasFactory<\Database\Factories\RoleFactory> */
-    use HasFactory;
+    // use HasFactory;
 
-    public $incrementing = false;
+    // public $incrementing = false;
 
-    protected $keyType = 'string';
+    // protected $keyType = 'string';
 
-    protected $fillable = [
-        'name',
-        'description',
-    ];
+    protected $fillable = ['name'];
 
     public function users(): BelongsToMany
     {
-        return $this->belongsToMany(User::class)
-            ->withTimestamps()
-            ->withPivot('id', 'deleted_at');
+        return $this->belongsToMany(User::class, 'user_roles');
     }
 }

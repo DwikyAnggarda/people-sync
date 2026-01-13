@@ -1,0 +1,18 @@
+[90m= [39m[34;4mIlluminate\Database\Eloquent\Collection[39;24m {#7355
+    [34mall[39m: [
+      [34;4mApp\Models\Attendance[39;24m {#7357
+        [34mid[39m: [35m1[39m,
+        [34memployee_id[39m: [35m3[39m,
+        [34mdate[39m: "[32m2026-01-06[39m",
+        [34mclock_in_at[39m: "[32m2026-01-06 09:46:51[39m",
+        [34mclock_out_at[39m: "[32m2026-01-06 09:47:33[39m",
+        [34mphoto_path[39m: [36mnull[39m,
+        [34mlatitude[39m: [36mnull[39m,
+        [34mlongitude[39m: [36mnull[39m,
+        [34msource[39m: "[32mmobile[39m",
+        [34mcreated_at[39m: "[32m2026-01-06 09:46:51[39m",
+        [34mupdated_at[39m: "[32m2026-01-06 09:47:33[39m",
+      },
+    ],
+  }
+

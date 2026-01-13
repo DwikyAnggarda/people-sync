@@ -1,0 +1,1867 @@
+openapi: 3.0.3
+info:
+  title: PeopleSync API
+  version: 1.0.0
+  description: |
+    PeopleSync HRIS API - Complete specification for all core modules.
+    
+    ## Developer Notes
+    
+    ### Async Operations
+    - `POST /payrolls`: Returns 202 Accepted with job_id. Check status via `GET /jobs/{job_id}`
+    - Payroll generation updates denormalized fields asynchronously:
+      - `employees.latest_payroll_id`
+      - `employees.current_salary`
+      - `payroll_snapshots` materialized view
+    
+    ### Idempotency
+    - Critical endpoints (`/attendances/sync`, `/payrolls`) require `Idempotency-Key` header (UUID v4)
+    - Keys are stored for 24h to prevent duplicate processing
+    - Duplicate keys return 409 Conflict with details
+    
+    ### File Uploads
+    1. `POST /uploads/presign` returns S3 presigned URL
+    2. Client uploads directly to S3 using returned URL
+    3. Use returned `file_url` in API requests (e.g., attendance photo)
+    4. All uploads are validated for content type and size server-side
+    
+    ### Required DB Extensions
+    ```sql
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- For gen_random_uuid()
+    CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- For text search indexes
+    ```
+    
+    ### Critical Indexes
+    ```sql
+    CREATE INDEX CONCURRENTLY idx_attendances_clock_in ON attendances(employee_id, clock_in DESC);
+    CREATE INDEX CONCURRENTLY idx_leaves_dates ON leaves(employee_id, start_date, end_date);
+    CREATE INDEX CONCURRENTLY idx_payroll_employee_period ON payrolls(employee_id, period_year, period_month);
+    CREATE UNIQUE INDEX CONCURRENTLY idx_idempotency_keys ON idempotency_store(idempotency_key);
+    CREATE INDEX CONCURRENTLY idx_employees_dept_updated ON employees(department_id, updated_at DESC);
+    ```
+    
+    ### Worker Responsibilities
+    - [ ] Process payroll jobs (generate payrolls → update snapshots → denorm to employees)
+    - [ ] Refresh `mv_payroll_by_department` materialized view daily
+    - [ ] Clean up idempotency keys after 24h
+    - [ ] Process attendance sync queue (validate geolocation, update sync_status)
+    - [ ] Send notifications for payroll completion and leave approvals
+    - [ ] Generate activity logs for critical operations
+
+servers:
+  - url: https://api.peoplesync.example/v1
+    description: Production API
+  - url: http://localhost:8000/api/v1
+    description: Local development
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    pageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: Page number for pagination
+    perPageParam:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        default: 25
+        minimum: 1
+        maximum: 100
+      description: Number of items per page
+    idParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Resource UUID identifier
+    jobIdParam:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Job identifier
+    includeParam:
+      name: include
+      in: query
+      description: |
+        Comma-separated relations to eager-load. Available relations vary by endpoint.
+        Example: department,latest_payroll,user
+      schema:
+        type: string
+        example: "department,latest_payroll"
+
+  schemas:
+    MetaPagination:
+      type: object
+      properties:
+        current_page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 25
+        total:
+          type: integer
+          example: 120
+        last_page:
+          type: integer
+          example: 5
+        from:
+          type: integer
+          example: 1
+        to:
+          type: integer
+          example: 25
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Validation failed"
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        status:
+          type: integer
+          example: 400
+      required:
+        - message
+        - status
+
+    UUID:
+      type: string
+      format: uuid
+      example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+    AuthLoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "admin@company.com"
+        password:
+          type: string
+          example: "securepassword123"
+
+    User:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        email:
+          type: string
+          format: email
+          example: "admin@company.com"
+        employee_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        is_active:
+          type: boolean
+          example: true
+        roles:
+          type: array
+          items:
+            type: string
+          example: ["admin", "hr"]
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-15T08:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-20T10:30:00Z"
+
+    AuthLoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxxxx"
+        token_type:
+          type: string
+          example: "Bearer"
+        expires_in:
+          type: integer
+          example: 3600
+        user:
+          $ref: "#/components/schemas/User"
+
+    Role:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+          example: "admin"
+        description:
+          type: string
+          nullable: true
+          example: "System administrator"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-10T09:00:00Z"
+
+    Department:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+          example: "Engineering"
+        code:
+          type: string
+          example: "ENG"
+        parent_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-12T10:15:00Z"
+
+    DepartmentCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Engineering"
+        code:
+          type: string
+          example: "ENG"
+        parent_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+
+    DepartmentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Engineering"
+        code:
+          type: string
+          example: "ENG"
+        parent_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+
+    Employee:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        employee_number:
+          type: string
+          example: "EMP-1001"
+        first_name:
+          type: string
+          example: "John"
+        last_name:
+          type: string
+          example: "Doe"
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: "john.doe@company.com"
+        phone:
+          type: string
+          nullable: true
+          example: "+628123456789"
+        department_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        department:
+          $ref: "#/components/schemas/Department"
+        hired_at:
+          type: string
+          format: date
+          example: "2020-01-15"
+        status:
+          type: string
+          enum: [active, terminated, on_leave]
+          example: "active"
+        current_salary:
+          type: number
+          format: float
+          nullable: true
+          example: 15000000
+        latest_payroll_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        latest_payroll:
+          $ref: "#/components/schemas/Payroll"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-15T08:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-20T10:30:00Z"
+
+    EmployeeCreate:
+      type: object
+      required:
+        - employee_number
+        - first_name
+      properties:
+        employee_number:
+          type: string
+          example: "EMP-1002"
+        first_name:
+          type: string
+          example: "Jane"
+        last_name:
+          type: string
+          example: "Smith"
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        department_id:
+          $ref: "#/components/schemas/UUID"
+        hired_at:
+          type: string
+          format: date
+        status:
+          type: string
+          default: "active"
+          example: "active"
+    
+    EmployeeUpdate:
+      type: object
+      properties:
+        first_name:
+          type: string
+          example: "Jane"
+        last_name:
+          type: string
+          example: "Smith"
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        department_id:
+          $ref: "#/components/schemas/UUID"
+        status:
+          type: string
+          enum: [active, terminated, on_leave]
+        current_salary:
+          type: number
+          format: float
+
+    Attendance:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        employee_id:
+          $ref: "#/components/schemas/UUID"
+        clock_in:
+          type: string
+          format: date-time
+          example: "2025-11-16T08:00:00Z"
+        clock_out:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-11-16T17:00:00Z"
+        lat:
+          type: number
+          format: float
+          nullable: true
+          example: -6.2088
+        lng:
+          type: number
+          format: float
+          nullable: true
+          example: 106.8456
+        location:
+          type: string
+          nullable: true
+          example: "Office HQ, Jakarta"
+        location_accuracy:
+          type: number
+          format: float
+          nullable: true
+          example: 5.5
+        device_id:
+          type: string
+          nullable: true
+          example: "mobile-app-v1"
+        photo_url:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://cdn.peoplesync.example/attendances/2025/11/photo.jpg"
+        source:
+          type: string
+          enum: [mobile, web, offline]
+          example: "mobile"
+        sync_status:
+          type: string
+          enum: [pending, synced, failed]
+          example: "synced"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-16T08:01:30Z"
+
+    AttendanceClockIn:
+      type: object
+      required:
+        - lat
+        - lng
+        - location
+      properties:
+        lat:
+          type: number
+          example: -6.2088
+        lng:
+          type: number
+          example: 106.8456
+        location:
+          type: string
+          example: "Office HQ, Jakarta"
+        location_accuracy:
+          type: number
+          format: float
+          description: Accuracy in meters
+          example: 15.3
+        photo_url:
+          type: string
+          format: uri
+          description: S3 URL from presign endpoint
+
+    AttendanceSync:
+      type: object
+      required:
+        - employee_id
+        - clock_in_client_ts
+        - source
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Client-generated ID for conflict resolution
+          example: "client-att-123"
+        employee_id:
+          $ref: "#/components/schemas/UUID"
+        clock_in_client_ts:
+          type: string
+          format: date-time
+          example: "2025-11-16T08:00:00Z"
+        clock_out_client_ts:
+          type: string
+          format: date-time
+          nullable: true
+        lat:
+          type: number
+          format: float
+        lng:
+          type: number
+          format: float
+        location:
+          type: string
+        location_accuracy:
+          type: number
+          format: float
+        device_id:
+          type: string
+          example: "device-abc123"
+        photo_url:
+          type: string
+          format: uri
+        source:
+          type: string
+          enum: [mobile, web, offline]
+        sync_status:
+          type: string
+          enum: [pending, synced, failed]
+
+    Leave:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        employee_id:
+          $ref: "#/components/schemas/UUID"
+        leave_type:
+          type: string
+          enum: [annual, sick, permission, unpaid]
+          example: "annual"
+        start_date:
+          type: string
+          format: date
+          example: "2025-12-01"
+        end_date:
+          type: string
+          format: date
+          example: "2025-12-05"
+        days:
+          type: number
+          format: float
+          example: 5
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          example: "pending"
+        approved_by:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+          example: "Family vacation"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-11-15T10:30:00Z"
+
+    LeaveCreate:
+      type: object
+      required:
+        - leave_type
+        - start_date
+        - end_date
+        - days
+      properties:
+        leave_type:
+          type: string
+          enum: [annual, sick, permission, unpaid]
+          example: "annual"
+        start_date:
+          type: string
+          format: date
+          example: "2025-12-01"
+        end_date:
+          type: string
+          format: date
+          example: "2025-12-05"
+        days:
+          type: number
+          format: float
+          example: 5
+        reason:
+          type: string
+          nullable: true
+          example: "Family vacation"
+
+    LeaveApprove:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+          example: "approved"
+        note:
+          type: string
+          example: "Approved for annual vacation"
+
+    SalaryComponent:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+          example: "Basic Salary"
+        type:
+          type: string
+          enum: [fixed, variable, deduction]
+          example: "fixed"
+        default_amount:
+          type: number
+          format: float
+          example: 5000000
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-15T08:00:00Z"
+
+    SalaryComponentCreate:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+          example: "Basic Salary"
+        type:
+          type: string
+          enum: [fixed, variable, deduction]
+          example: "fixed"
+        default_amount:
+          type: number
+          format: float
+          example: 5000000
+
+    SalaryComponentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Basic Salary"
+        type:
+          type: string
+          enum: [fixed, variable, deduction]
+          example: "fixed"
+        default_amount:
+          type: number
+          format: float
+          example: 5000000
+
+    Payroll:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        employee_id:
+          $ref: "#/components/schemas/UUID"
+        period_year:
+          type: integer
+          example: 2025
+        period_month:
+          type: integer
+          example: 11
+        gross_amount:
+          type: number
+          format: float
+          example: 12500000
+        net_amount:
+          type: number
+          format: float
+          example: 11250000
+        status:
+          type: string
+          enum: [draft, generated, posted]
+          example: "posted"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PayrollItem"
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-11-26T14:30:00Z"
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-25T09:00:00Z"
+
+    PayrollItem:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        component_id:
+          $ref: "#/components/schemas/UUID"
+        component_name:
+          type: string
+          example: "Basic Salary"
+        amount:
+          type: number
+          format: float
+          example: 10000000
+        note:
+          type: string
+          nullable: true
+          example: "Monthly base salary"
+
+    PayrollGenerate:
+      type: object
+      required:
+        - period_year
+        - period_month
+      properties:
+        period_year:
+          type: integer
+          example: 2025
+        period_month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 11
+        department_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+          description: Optional filter by department
+        employee_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/UUID"
+          nullable: true
+          description: Optional specific employees
+
+    PayrollSnapshot:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        employee_id:
+          $ref: "#/components/schemas/UUID"
+        period_year:
+          type: integer
+          example: 2025
+        period_month:
+          type: integer
+          example: 11
+        gross_amount:
+          type: number
+          format: float
+          example: 12500000
+        net_amount:
+          type: number
+          format: float
+          example: 11250000
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-26T14:30:00Z"
+
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        user_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        action:
+          type: string
+          example: "employee.created"
+        resource_type:
+          type: string
+          example: "employee"
+        resource_id:
+          $ref: "#/components/schemas/UUID"
+          nullable: true
+        meta:
+          type: object
+          nullable: true
+          example: {"employee_number": "EMP-001", "name": "John Doe"}
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-15T10:23:00Z"
+
+    Notification:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        user_id:
+          $ref: "#/components/schemas/UUID"
+        title:
+          type: string
+          example: "Payroll Finished"
+        message:
+          type: string
+          example: "Payroll for Nov 2025 has been processed."
+        is_read:
+          type: boolean
+          example: false
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-26T14:35:00Z"
+
+    Setting:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        org_name:
+          type: string
+          example: "PT PeopleSync Indonesia"
+        payroll_cutoff_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+          example: 25
+        timezone:
+          type: string
+          example: "Asia/Jakarta"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-11-01T10:00:00Z"
+
+    SettingUpdate:
+      type: object
+      properties:
+        org_name:
+          type: string
+          example: "PT PeopleSync Indonesia"
+        payroll_cutoff_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        timezone:
+          type: string
+          example: "Asia/Jakarta"
+
+    JobStatus:
+      type: object
+      properties:
+        job_id:
+          type: string
+          example: "job_payroll_nov2025"
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+          example: "processing"
+        progress:
+          type: object
+          properties:
+            processed:
+              type: integer
+              example: 15
+            total:
+              type: integer
+              example: 100
+        result:
+          oneOf:
+            - type: object
+              properties:
+                payroll_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+            - type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-13T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-11-13T09:05:00Z"
+
+    PresignedUrl:
+      type: object
+      required:
+        - upload_url
+        - file_url
+      properties:
+        upload_url:
+          type: string
+          format: uri
+          example: "https://s3.ap-southeast-1.amazonaws.com/bucket/attendances/2025/11/photo.jpg?X-Amz-Signature=..."
+        file_url:
+          type: string
+          format: uri
+          example: "https://cdn.peoplesync.example/attendances/2025/11/photo.jpg"
+        fields:
+          type: object
+          nullable: true
+          example: null
+        expires_in:
+          type: integer
+          example: 300
+
+    PresignRequest:
+      type: object
+      required:
+        - file_name
+        - file_type
+      properties:
+        file_name:
+          type: string
+          example: "attendance_photo.jpg"
+        file_type:
+          type: string
+          example: "image/jpeg"
+        path_prefix:
+          type: string
+          description: S3 path prefix for organizing uploads
+          example: "attendances/2025/11"
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        version:
+          type: string
+          example: "1.0.0"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-11-16T10:00:00Z"
+        services:
+          type: object
+          properties:
+            database:
+              type: string
+              example: "connected"
+            redis:
+              type: string
+              example: "connected"
+            storage:
+              type: string
+              example: "connected"
+
+  responses:
+    Unauthorized:
+      description: Unauthorized access
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    
+    Forbidden:
+      description: Access forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    
+    Conflict:
+      description: Resource conflict (e.g., duplicate idempotency key)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+security:
+  - bearerAuth: []
+
+paths:
+  # Authentication
+  /auth/login:
+    post:
+      summary: Authenticate user
+      description: Exchange credentials for JWT token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthLoginRequest"
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthLoginResponse"
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  
+  /auth/me:
+    get:
+      summary: Get current user
+      description: Returns the authenticated user profile with roles and permissions
+      security:
+        - bearerAuth: []
+      tags: [Authentication]
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+
+  # Roles
+  /roles:
+    get:
+      summary: List all roles
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/perPageParam'
+      tags: [Roles]
+      responses:
+        '200':
+          description: Roles list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+                  meta:
+                    $ref: '#/components/schemas/MetaPagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create a new role
+      security:
+        - bearerAuth: []
+      tags: [Roles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Role'
+      responses:
+        '201':
+          description: Role created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /roles/{id}:
+    get:
+      summary: Get role details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      tags: [Roles]
+      responses:
+        '200':
+          description: Role details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update role
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      tags: [Roles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Role'
+      responses:
+        '200':
+          description: Role updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Departments
+  /departments:
+    get:
+      summary: List all departments
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/perPageParam'
+        - $ref: '#/components/parameters/includeParam'
+      tags: [Departments]
+      responses:
+        '200':
+          description: Department list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Department'
+                  meta:
+                    $ref: '#/components/schemas/MetaPagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      summary: Create a new department
+      security:
+        - bearerAuth: []
+      tags: [Departments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentCreate'
+      responses:
+        '201':
+          description: Department created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /departments/{id}:
+    get:
+      summary: Get department details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+        - $ref: '#/components/parameters/includeParam'
+      tags: [Departments]
+      responses:
+        '200':
+          description: Department details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update department
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      tags: [Departments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentUpdate'
+      responses:
+        '200':
+          description: Department updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Employees
+  /employees:
+    get:
+      summary: List employees
+      description: Retrieve paginated employee list with optional filters and includes
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+        - $ref: "#/components/parameters/includeParam"
+        - name: department_id
+          in: query
+          description: Filter by department
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - name: status
+          in: query
+          description: Filter by employment status
+          schema:
+            type: string
+            enum: [active, terminated, on_leave]
+      tags: [Employees]
+      responses:
+        '200':
+          description: Employee list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Employee"
+                  meta:
+                    $ref: "#/components/schemas/MetaPagination"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+    
+    post:
+      summary: Create employee
+      description: Add new employee record
+      security:
+        - bearerAuth: []
+      tags: [Employees]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeCreate"
+      responses:
+        '201':
+          description: Employee created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+
+  /employees/{id}:
+    get:
+      summary: Get employee details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/idParam"
+        - $ref: "#/components/parameters/includeParam"
+      tags: [Employees]
+      responses:
+        '200':
+          description: Employee details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+    
+    put:
+      summary: Update employee
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/idParam"
+      tags: [Employees]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeUpdate"
+      responses:
+        '200':
+          description: Employee updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+
+  # Attendances
+  /attendances/clock-in:
+    post:
+      summary: Record clock-in
+      description: Register employee attendance start with geolocation
+      security:
+        - bearerAuth: []
+      tags: [Attendances]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceClockIn"
+      responses:
+        '201':
+          description: Clock-in recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '409':
+          description: Already clocked in today
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /attendances/sync:
+    post:
+      summary: Sync offline attendances
+      description: |
+        Idempotent endpoint for syncing multiple offline attendance records.
+        Requires `Idempotency-Key` header.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          description: Unique key to prevent duplicate processing (required)
+      tags: [Attendances]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                records:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/AttendanceSync"
+              required:
+                - records
+      responses:
+        '202':
+          description: Sync accepted and queued for processing
+          headers:
+            Location:
+              description: Job status endpoint
+              schema:
+                type: string
+                example: "/api/v1/jobs/job_att_sync_20251116_1"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatus"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '409':
+          $ref: "#/components/responses/Conflict"
+
+  # Leaves
+  /leaves:
+    get:
+      summary: List leaves
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+        - $ref: "#/components/parameters/includeParam"
+        - name: status
+          in: query
+          description: Filter by leave status
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+        - name: employee_id
+          in: query
+          description: Filter by employee
+          schema:
+            $ref: "#/components/schemas/UUID"
+      tags: [Leaves]
+      responses:
+        '200':
+          description: Leave requests list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Leave"
+                  meta:
+                    $ref: "#/components/schemas/MetaPagination"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+    
+    post:
+      summary: Create leave request
+      security:
+        - bearerAuth: []
+      tags: [Leaves]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveCreate"
+      responses:
+        '201':
+          description: Leave request created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leave"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+
+  /leaves/{id}/approve:
+    patch:
+      summary: Approve/reject leave
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/idParam"
+      tags: [Leaves]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveApprove"
+      responses:
+        '200':
+          description: Leave status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leave"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          description: Unauthorized approval attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '404':
+          $ref: "#/components/responses/NotFound"
+
+  # Salary Components
+  /salary_components:
+    get:
+      summary: List all salary components
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+      tags: [SalaryComponents]
+      responses:
+        '200':
+          description: Salary components list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SalaryComponent"
+                  meta:
+                    $ref: "#/components/schemas/MetaPagination"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create a new salary component
+      security:
+        - bearerAuth: []
+      tags: [SalaryComponents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalaryComponentCreate"
+      responses:
+        '201':
+          description: Salary component created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalaryComponent"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+
+  /salary_components/{id}:
+    get:
+      summary: Get salary component details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/idParam"
+      tags: [SalaryComponents]
+      responses:
+        '200':
+          description: Salary component details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalaryComponent"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update salary component
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/idParam"
+      tags: [SalaryComponents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalaryComponentUpdate"
+      responses:
+        '200':
+          description: Salary component updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalaryComponent"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+
+  # Payroll
+  /payrolls:
+    post:
+      summary: Generate payroll
+      description: |
+        Asynchronously generate payroll for given period.
+        Returns immediately with job_id. Check status via `/jobs/{job_id}`.
+        Requires `Idempotency-Key` header.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Unique key to prevent duplicate processing (required)
+      tags: [Payroll]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PayrollGenerate"
+      responses:
+        '202':
+          description: Payroll generation accepted
+          headers:
+            Location:
+              description: Job status endpoint
+              schema:
+                type: string
+                example: "/api/v1/jobs/job_payroll_nov2025"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatus"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '409':
+          $ref: "#/components/responses/Conflict"
+
+  /jobs/{job_id}:
+    get:
+      summary: Check job status
+      description: Check progress for async jobs (attendance sync, payroll generation)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/jobIdParam"
+      tags: [Jobs]
+      responses:
+        '200':
+          description: Job status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatus"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+
+  # Uploads
+  /uploads/presign:
+    post:
+      summary: Get presigned upload URL
+      description: Generate S3 presigned URL for file uploads
+      security:
+        - bearerAuth: []
+      tags: [Uploads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresignRequest"
+      responses:
+        '200':
+          description: Presign URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresignedUrl"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+
+  # Settings
+  /settings:
+    get:
+      summary: Get organization settings
+      security:
+        - bearerAuth: []
+      tags: [Settings]
+      responses:
+        '200':
+          description: Settings retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Setting"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+    
+    put:
+      summary: Update settings
+      security:
+        - bearerAuth: []
+      tags: [Settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingUpdate"
+      responses:
+        '200':
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Setting"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+
+  # Activity Logs
+  /activity_logs:
+    get:
+      summary: List activity logs
+      description: Retrieve audit logs for system activities
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+        - name: action
+          in: query
+          description: Filter by action type
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          description: Filter by user
+          schema:
+            $ref: "#/components/schemas/UUID"
+      tags: [ActivityLogs]
+      responses:
+        '200':
+          description: Activity logs retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ActivityLog"
+                  meta:
+                    $ref: "#/components/schemas/MetaPagination"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+
+  # Notifications
+  /notifications:
+    get:
+      summary: List notifications
+      description: Get notifications for the authenticated user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+        - name: is_read
+          in: query
+          description: Filter by read status
+          schema:
+            type: boolean
+      tags: [Notifications]
+      responses:
+        '200':
+          description: Notifications retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+                  meta:
+                    $ref: "#/components/schemas/MetaPagination"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+
+  # Health Check
+  /health:
+    get:
+      summary: Health check
+      description: Public endpoint to check API and dependency status
+      tags: [System]
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthCheck"

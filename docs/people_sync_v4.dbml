@@ -1,0 +1,159 @@
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  email varchar(255) [not null]
+  password varchar(255) [not null]
+  employee_id uuid [ref: > employees.id, null]
+  is_active boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table roles {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(100) [unique, not null]
+  description text
+  created_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table user_roles {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id, not null]
+  role_id uuid [ref: > roles.id, not null]
+  created_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table departments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(150) [not null]
+  code varchar(50)
+  parent_id uuid [ref: > departments.id, null]
+  created_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table employees {
+  id uuid [pk, default: `gen_random_uuid()`]
+  employee_number varchar(50) [not null]
+  first_name varchar(150) [not null]
+  last_name varchar(150)
+  email varchar(255)
+  phone varchar(50)
+  department_id uuid [ref: > departments.id, null]
+  hired_at date
+  status varchar(50) [default: 'active']
+  current_salary numeric(38,2)
+  latest_payroll_id uuid [ref: > payrolls.id, null]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table attendances {
+  id uuid [pk, default: `gen_random_uuid()`]
+  employee_id uuid [ref: > employees.id, not null]
+  clock_in timestamp [not null]
+  clock_out timestamp
+  clock_in_client_ts timestamp
+  clock_out_client_ts timestamp
+  lat numeric(10,7)
+  lng numeric(10,7)
+  location varchar(255)
+  location_accuracy numeric(8,3)
+  device_id varchar(255)
+  photo_url varchar(1024)
+  source varchar(50)
+  sync_status varchar(50) [default: 'pending']
+  created_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table leaves {
+  id uuid [pk, default: `gen_random_uuid()`]
+  employee_id uuid [ref: > employees.id, not null]
+  leave_type varchar(100)
+  start_date date [not null]
+  end_date date [not null]
+  days numeric(6,2)
+  status varchar(50) [default: 'pending']
+  approved_by uuid [ref: > users.id, null]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table salary_components {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(150) [not null]
+  type varchar(50) [not null]
+  default_amount numeric(38,2) [default: 0]
+  created_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table payrolls {
+  id uuid [pk, default: `gen_random_uuid()`]
+  employee_id uuid [ref: > employees.id, not null]
+  period_year int [not null]
+  period_month int [not null]
+  gross_amount numeric(38,2) [default: 0]
+  net_amount numeric(38,2) [default: 0]
+  status varchar(50) [default: 'draft']
+  generated_at timestamp
+  paid_at timestamp
+  created_at timestamp
+  -- NOTE: intentional: payrolls kept as hard records (no deleted_at)
+}
+
+Table payroll_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  payroll_id uuid [ref: > payrolls.id, not null]
+  component_id uuid [ref: > salary_components.id, not null]
+  amount numeric(38,2) [not null]
+  note text
+  created_at timestamp
+  -- payroll_items kept as hard records
+}
+
+Table payroll_snapshots {
+  id uuid [pk, default: `gen_random_uuid()`]
+  employee_id uuid [ref: > employees.id, not null]
+  period_year int [not null]
+  period_month int [not null]
+  gross_amount numeric(38,2)
+  net_amount numeric(38,2)
+  created_at timestamp
+}
+
+Table activity_logs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id, null]
+  action varchar(255) [not null]
+  resource_type varchar(100)
+  resource_id uuid
+  meta jsonb
+  created_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table notifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id, not null]
+  title varchar(255)
+  message text
+  is_read boolean [default: false]
+  sent_at timestamp
+  created_at timestamp
+  deleted_at timestamp [null]
+}
+
+Table settings {
+  id uuid [pk, default: `gen_random_uuid()`]
+  org_name varchar(255)
+  payroll_cutoff_day int [default: 25]
+  timezone varchar(100) [default: 'Asia/Jakarta']
+  created_at timestamp
+}
+

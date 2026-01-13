@@ -12,20 +12,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
+        // DB::statement('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
 
         Schema::create('users', function (Blueprint $table) {
-            $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->string('email', 255);
+            // $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->string('email');
+            $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->uuid('employee_id')->nullable();
-            $table->boolean('is_active')->default(true);
             $table->rememberToken();
-            $table->timestampsTz();
-            $table->softDeletesTz();
+            $table->timestamps();
         });
-
-        DB::statement('CREATE UNIQUE INDEX users_email_unique_not_deleted ON users (email) WHERE deleted_at IS NULL');
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();
@@ -50,7 +48,6 @@ return new class extends Migration
     {
         Schema::dropIfExists('sessions');
         Schema::dropIfExists('password_reset_tokens');
-        DB::statement('DROP INDEX IF EXISTS users_email_unique_not_deleted');
         Schema::dropIfExists('users');
     }
 };
