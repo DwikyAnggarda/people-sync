@@ -34,10 +34,10 @@ class UsersTable
                         'employee' => 'info',
                         default => 'gray',
                     }),
-                TextColumn::make('employee.name')
-                    ->label('Linked Employee')
-                    ->placeholder('No employee linked')
-                    ->toggleable(),
+                // TextColumn::make('employee.name')
+                //     ->label('Linked Employee')
+                //     ->placeholder('No employee linked')
+                //     ->toggleable(),
                 TextColumn::make('email_verified_at')
                     ->label('Verified')
                     ->dateTime('d M Y')

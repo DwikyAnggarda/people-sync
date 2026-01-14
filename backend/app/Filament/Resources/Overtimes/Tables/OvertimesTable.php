@@ -64,7 +64,10 @@ class OvertimesTable
                         default => 'gray',
                     }),
                 TextColumn::make('approver.name')
-                    ->label('Approved By'),
+                    ->label('Approved By')
+                    ->formatStateUsing(fn (?string $state, $record): string => 
+                        $record?->status === 'approved' && $state ? $state : '-'
+                    ),
             ])
             ->filters([
                 TrashedFilter::make(),

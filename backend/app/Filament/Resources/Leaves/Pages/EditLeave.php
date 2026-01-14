@@ -25,6 +25,8 @@ class EditLeave extends EditRecord
     {
         if (isset($data['status']) && $data['status'] === 'approved') {
             $data['approved_by'] = auth()->id();
+        } else {
+            $data['approved_by'] = null;
         }
 
         return $data;

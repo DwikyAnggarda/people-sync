@@ -35,4 +35,13 @@ class Overtime extends Model
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $model) {
+            if ($model->status !== 'approved') {
+                $model->approved_by = null;
+            }
+        });
+    }
 }
