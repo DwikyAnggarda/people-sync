@@ -24,7 +24,7 @@ class EmployeeResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Human Resources';
+    protected static string|UnitEnum|null $navigationGroup = 'Kelola Karyawan';
 
     protected static ?int $navigationSort = 1;
 
@@ -32,7 +32,7 @@ class EmployeeResource extends Resource
 
     public static function getNavigationLabel(): string
     {
-        return 'Employee Directory';
+        return 'Data Karyawan';
     }
 
     public static function form(Schema $schema): Schema

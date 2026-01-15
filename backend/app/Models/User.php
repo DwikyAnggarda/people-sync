@@ -71,17 +71,9 @@ class User extends Authenticatable implements JWTSubject, FilamentUser
 
     public function canAccessPanel(\Filament\Panel $panel): bool
     {
-        return $this->roles()
-            ->where('name', 'admin')
-            ->exists();
-    }
-
-    /**
-     * Roles (RBAC).
-     */
-    public function roles()
-    {
-        return $this->belongsToMany(Role::class, 'user_roles');
+        // Use Spatie's hasRole method for authorization
+        // Allow admin and hr roles to access the panel
+        return $this->hasRole(['admin', 'hr']);
     }
 
     /**
