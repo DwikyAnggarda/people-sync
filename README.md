@@ -1,8 +1,8 @@
 **PeopleSync — Employee Attendance System (MVP)**
 
-PeopleSync adalah aplikasi absensi karyawan berbasis mobile & web yang dirancang sebagai HRIS MVP dengan fokus pada keakuratan data, auditability, dan skalabilitas backend.
+PeopleSync is a mobile & web-based employee attendance application designed as an HRIS MVP with a focus on data accuracy, auditability, and backend scalability.
 
-Proyek ini dibuat sebagai portfolio backend / fullstack engineer, dengan pendekatan real-world system design, bukan sekadar CRUD.
+This project was created as a backend / fullstack engineer portfolio, with a real-world system design approach, not just CRUD.
 
 ## Key Features (MVP)
 ### Employee (Mobile App)
