@@ -9,8 +9,8 @@ use Carbon\Carbon;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Form;
 use Filament\Resources\Pages\Page;
+use Filament\Schemas\Schema;
 use Illuminate\Contracts\Support\Htmlable;
 use Livewire\Attributes\Url;
 
@@ -45,10 +45,10 @@ class ListAttendanceReviewMonthly extends Page implements HasForms
         return 'Review Kehadiran (Bulanan)';
     }
 
-    public function form(Form $form): Form
+    public function form(Schema $schema): Schema
     {
-        return $form
-            ->schema([
+        return $schema
+            ->components([
                 DatePicker::make('start_date')
                     ->label('Tanggal Mulai')
                     ->default(now()->startOfMonth())

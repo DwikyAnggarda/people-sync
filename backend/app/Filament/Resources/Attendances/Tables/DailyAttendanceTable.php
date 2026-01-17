@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Attendances\Tables;
 
+use App\Enums\AttendanceSource;
 use App\Enums\AttendanceStatus;
 use App\Services\AttendanceService;
 use Filament\Actions\BulkActionGroup;
@@ -55,10 +56,9 @@ class DailyAttendanceTable
                 TextColumn::make('source')
                     ->label('Sumber')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'mobile' => 'info',
-                        'manual' => 'warning',
-                        default => 'gray',
+                    ->color(fn (AttendanceSource $state): string => match ($state) {
+                        AttendanceSource::Mobile => 'info',
+                        AttendanceSource::Manual => 'warning',
                     }),
                 TextColumn::make('notes')
                     ->label('Catatan')

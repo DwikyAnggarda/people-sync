@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\Employees\Tables;
 
-use App\Models\Role;
 use App\Models\User;
+use Spatie\Permission\Models\Role;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
