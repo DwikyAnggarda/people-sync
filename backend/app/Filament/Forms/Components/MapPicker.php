@@ -2,47 +2,61 @@
 
 namespace App\Filament\Forms\Components;
 
+use Closure;
 use Filament\Forms\Components\Field;
 
 class MapPicker extends Field
 {
     protected string $view = 'filament.forms.components.map-picker';
 
-    protected float $defaultLatitude = -6.2088;
+    protected float|Closure $defaultLatitude = -6.2088;
 
-    protected float $defaultLongitude = 106.8456;
+    protected float|Closure $defaultLongitude = 106.8456;
 
-    protected int $defaultZoom = 13;
+    protected int|Closure $defaultZoom = 13;
 
-    protected int $minRadius = 10;
+    protected int|Closure $minRadius = 10;
 
-    protected int $maxRadius = 5000;
+    protected int|Closure $maxRadius = 5000;
 
-    protected int $defaultRadius = 100;
+    protected int|Closure $defaultRadius = 100;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->default([
-            'latitude' => $this->defaultLatitude,
-            'longitude' => $this->defaultLongitude,
-            'radius_meters' => $this->defaultRadius,
+        $this->default(fn (): array => [
+            'latitude' => $this->evaluate($this->defaultLatitude),
+            'longitude' => $this->evaluate($this->defaultLongitude),
+            'radius_meters' => $this->evaluate($this->defaultRadius),
         ]);
 
-        $this->dehydrateStateUsing(function ($state) {
-            if (is_array($state)) {
-                return $state;
+        $this->afterStateHydrated(function (MapPicker $component, $state): void {
+            if (is_array($state) && isset($state['latitude'], $state['longitude'])) {
+                return;
             }
+
+            $component->state([
+                'latitude' => $this->evaluate($this->defaultLatitude),
+                'longitude' => $this->evaluate($this->defaultLongitude),
+                'radius_meters' => $this->evaluate($this->defaultRadius),
+            ]);
+        });
+
+        $this->dehydrateStateUsing(function ($state): ?array {
+            if (!is_array($state)) {
+                return null;
+            }
+
             return [
-                'latitude' => $this->defaultLatitude,
-                'longitude' => $this->defaultLongitude,
-                'radius_meters' => $this->defaultRadius,
+                'latitude' => (float) ($state['latitude'] ?? $this->evaluate($this->defaultLatitude)),
+                'longitude' => (float) ($state['longitude'] ?? $this->evaluate($this->defaultLongitude)),
+                'radius_meters' => (int) ($state['radius_meters'] ?? $this->evaluate($this->defaultRadius)),
             ];
         });
     }
 
-    public function defaultLocation(float $latitude, float $longitude): static
+    public function defaultLocation(float|Closure $latitude, float|Closure $longitude): static
     {
         $this->defaultLatitude = $latitude;
         $this->defaultLongitude = $longitude;
@@ -50,14 +64,14 @@ class MapPicker extends Field
         return $this;
     }
 
-    public function defaultZoom(int $zoom): static
+    public function defaultZoom(int|Closure $zoom): static
     {
         $this->defaultZoom = $zoom;
 
         return $this;
     }
 
-    public function radiusRange(int $min, int $max): static
+    public function radiusRange(int|Closure $min, int|Closure $max): static
     {
         $this->minRadius = $min;
         $this->maxRadius = $max;
@@ -65,7 +79,7 @@ class MapPicker extends Field
         return $this;
     }
 
-    public function defaultRadius(int $radius): static
+    public function defaultRadius(int|Closure $radius): static
     {
         $this->defaultRadius = $radius;
 
@@ -74,31 +88,31 @@ class MapPicker extends Field
 
     public function getDefaultLatitude(): float
     {
-        return $this->defaultLatitude;
+        return $this->evaluate($this->defaultLatitude);
     }
 
     public function getDefaultLongitude(): float
     {
-        return $this->defaultLongitude;
+        return $this->evaluate($this->defaultLongitude);
     }
 
     public function getDefaultZoom(): int
     {
-        return $this->defaultZoom;
+        return $this->evaluate($this->defaultZoom);
     }
 
     public function getMinRadius(): int
     {
-        return $this->minRadius;
+        return $this->evaluate($this->minRadius);
     }
 
     public function getMaxRadius(): int
     {
-        return $this->maxRadius;
+        return $this->evaluate($this->maxRadius);
     }
 
     public function getDefaultRadius(): int
     {
-        return $this->defaultRadius;
+        return $this->evaluate($this->defaultRadius);
     }
 }

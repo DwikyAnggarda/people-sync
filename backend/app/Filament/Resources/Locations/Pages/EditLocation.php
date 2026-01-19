@@ -21,9 +21,9 @@ class EditLocation extends EditRecord
     {
         // Set location data for MapPicker component
         $data['location'] = [
-            'latitude' => $data['latitude'],
-            'longitude' => $data['longitude'],
-            'radius_meters' => $data['radius_meters'],
+            'latitude' => (float) ($data['latitude'] ?? -6.2088),
+            'longitude' => (float) ($data['longitude'] ?? 106.8456),
+            'radius_meters' => (int) ($data['radius_meters'] ?? 100),
         ];
 
         return $data;
@@ -33,9 +33,9 @@ class EditLocation extends EditRecord
     {
         // Extract location data from MapPicker component
         if (isset($data['location']) && is_array($data['location'])) {
-            $data['latitude'] = $data['location']['latitude'];
-            $data['longitude'] = $data['location']['longitude'];
-            $data['radius_meters'] = $data['location']['radius_meters'];
+            $data['latitude'] = (float) ($data['location']['latitude'] ?? -6.2088);
+            $data['longitude'] = (float) ($data['location']['longitude'] ?? 106.8456);
+            $data['radius_meters'] = (int) ($data['location']['radius_meters'] ?? 100);
             unset($data['location']);
         }
 

@@ -14,9 +14,9 @@ class CreateLocation extends CreateRecord
     {
         // Extract location data from MapPicker component
         if (isset($data['location']) && is_array($data['location'])) {
-            $data['latitude'] = $data['location']['latitude'];
-            $data['longitude'] = $data['location']['longitude'];
-            $data['radius_meters'] = $data['location']['radius_meters'];
+            $data['latitude'] = (float) ($data['location']['latitude'] ?? -6.2088);
+            $data['longitude'] = (float) ($data['location']['longitude'] ?? 106.8456);
+            $data['radius_meters'] = (int) ($data['location']['radius_meters'] ?? 100);
             unset($data['location']);
         }
 
