@@ -49,13 +49,16 @@ PeopleSync is a mobile & web-based employee attendance application designed as a
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Flutter (Mobile / Web)                    │
-│                         [Planned]                            │
+│                    Flutter (Mobile App)                      │
+│                  people-sync-mobile [Planned]                │
 └─────────────────────────────────────────────────────────────┘
-                              ↓
+                              ↓ HTTPS + JWT
 ┌─────────────────────────────────────────────────────────────┐
 │              Laravel 12 API (JWT + Spatie RBAC)             │
-│                      [Implemented]                           │
+│                   /api/v1/* [Implemented]                    │
+├─────────────────────────────────────────────────────────────┤
+│               Filament v4 Admin Panel                        │
+│                   /admin [Implemented]                       │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -63,6 +66,60 @@ PeopleSync is a mobile & web-based employee attendance application designed as a
 │                      [Implemented]                           │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Repository Structure
+| Repository | Purpose | Status |
+|------------|---------|--------|
+| `people-sync` | Backend API + Admin Panel (Laravel + Filament) | ✅ Current |
+| `people-sync-mobile` | Mobile App for Employees (Flutter) | 🔜 Planned |
+
+---
+
+## 📡 Mobile API (v1)
+
+Base URL: `/api/v1`
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/auth/login` | Login with email & password |
+| `GET` | `/auth/me` | Get current user + employee data |
+| `POST` | `/auth/refresh` | Refresh JWT token |
+| `POST` | `/auth/logout` | Invalidate token |
+
+### Attendance
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/attendances` | List attendance history (paginated) |
+| `GET` | `/attendances/today` | Get today's attendance status |
+| `GET` | `/attendances/summary` | Monthly summary |
+| `POST` | `/attendances/clock-in` | Clock in with GPS + photo |
+| `POST` | `/attendances/clock-out` | Clock out with GPS + photo |
+
+### Leave
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/leaves` | List my leave requests |
+| `POST` | `/leaves` | Submit new leave request |
+| `GET` | `/leaves/{id}` | Get leave detail |
+| `DELETE` | `/leaves/{id}` | Cancel pending leave |
+
+### Overtime
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/overtimes` | List my overtime requests |
+| `POST` | `/overtimes` | Submit new overtime request |
+| `GET` | `/overtimes/{id}` | Get overtime detail |
+| `DELETE` | `/overtimes/{id}` | Cancel pending overtime |
+
+### Supporting Data
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/locations` | Get active attendance locations |
+| `GET` | `/holidays` | Get holidays (for calendar) |
+| `GET` | `/work-schedules` | Get work schedule config |
+
+> 📄 Full API specification: [docs/api/api-spec.md](docs/api/api-spec.md)
 
 ---
 
@@ -252,25 +309,26 @@ This project demonstrates:
 people-sync/
 ├── backend/
 │   ├── app/
-│   │   ├── Enums/              # AttendanceSource, AttendanceStatus, DayOfWeek
+│   │   ├── Enums/                  # AttendanceSource, AttendanceStatus, DayOfWeek
 │   │   ├── Filament/
 │   │   │   ├── Forms/Components/   # Custom components (MapPicker)
-│   │   │   └── Resources/          # Resource modules
-│   │   │       ├── Attendances/
-│   │   │       ├── Departments/
-│   │   │       ├── Employees/
-│   │   │       ├── Holidays/
-│   │   │       ├── Leaves/
-│   │   │       ├── Locations/
-│   │   │       ├── Overtimes/
-│   │   │       ├── Users/
-│   │   │       └── WorkSchedules/
+│   │   │   └── Resources/          # Admin panel resources
+│   │   ├── Http/
+│   │   │   ├── Controllers/
+│   │   │   │   └── Api/V1/         # Mobile API controllers
+│   │   │   ├── Middleware/         # JWT, ActiveUser, EmployeeOnly
+│   │   │   ├── Requests/Api/V1/    # Form request validation
+│   │   │   └── Resources/Api/V1/   # API response transformers
 │   │   ├── Models/
 │   │   └── Services/
 │   ├── database/migrations/
+│   ├── docs/api/                   # API specification
 │   └── routes/
+│       ├── api.php                 # Mobile API routes (/api/v1/*)
+│       └── web.php                 # Admin panel routes
 └── docs/
-    └── v2/                     # PRD & migration specs
+    ├── api/                        # API documentation
+    └── v2/                         # PRD & migration specs
 ```
 
 ---

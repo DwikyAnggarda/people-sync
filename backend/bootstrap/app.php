@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'jwt.auth' => \App\Http\Middleware\JwtAuthenticate::class,
             'active.user' => \App\Http\Middleware\EnsureUserIsActive::class,
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
+            'employee.only' => \App\Http\Middleware\EnsureUserIsEmployee::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
