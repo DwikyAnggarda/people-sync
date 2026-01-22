@@ -11,6 +11,18 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 class AuthController extends Controller
 {
     /**
+     * Try to invalidate token, gracefully handle if blacklist is disabled.
+     */
+    private function tryInvalidateToken(string $token): void
+    {
+        try {
+            JWTAuth::setToken($token)->invalidate();
+        } catch (\Tymon\JWTAuth\Exceptions\JWTException $e) {
+            // Blacklist not enabled, token won't be invalidated server-side
+        }
+    }
+
+    /**
      * Login and get JWT token.
      */
     public function login(LoginRequest $request): JsonResponse
@@ -25,20 +37,20 @@ class AuthController extends Controller
 
         // Check if user is active
         if ($user->deleted_at !== null) {
-            JWTAuth::setToken($token)->invalidate();
+            $this->tryInvalidateToken($token);
             return $this->error('Akun Anda tidak aktif', null, 403);
         }
 
         // Check if user has employee record
         $employee = $user->employee;
         if (!$employee) {
-            JWTAuth::setToken($token)->invalidate();
+            $this->tryInvalidateToken($token);
             return $this->error('Akun Anda tidak terdaftar sebagai karyawan', null, 403);
         }
 
         // Check if employee is active
         if ($employee->status !== 'active') {
-            JWTAuth::setToken($token)->invalidate();
+            $this->tryInvalidateToken($token);
             return $this->error('Status karyawan Anda tidak aktif', null, 403);
         }
 
@@ -84,7 +96,12 @@ class AuthController extends Controller
      */
     public function logout(): JsonResponse
     {
-        JWTAuth::invalidate(JWTAuth::getToken());
+        try {
+            JWTAuth::invalidate(JWTAuth::getToken());
+        } catch (\Tymon\JWTAuth\Exceptions\JWTException $e) {
+            // Token blacklist not enabled, just proceed with logout
+            // The client should discard the token on their side
+        }
 
         return $this->success(null, 'Logout berhasil');
     }
