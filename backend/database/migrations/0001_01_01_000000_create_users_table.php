@@ -11,14 +11,10 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        // 1. Ensure the UUID extension is available (Standard for Postgres)
-        DB::statement('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
-
         Schema::create('users', function (Blueprint $table) {
-            // 2. Combine the definition into one line
-            $table->uuid('id')->primary()->default(DB::raw('uuid_generate_v4()'));
+            $table->uuid('id')->primary();
             $table->string('name');
-            $table->string('email')->unique(); // Safety: email should be unique
+            $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
