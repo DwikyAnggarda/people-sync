@@ -5,20 +5,20 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        // DB::statement('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
+        // 1. Ensure the UUID extension is available (Standard for Postgres)
+        DB::statement('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
 
         Schema::create('users', function (Blueprint $table) {
-            // $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->uuid('id')->primary();
+            // 2. Combine the definition into one line
+            $table->uuid('id')->primary()->default(DB::raw('uuid_generate_v4()'));
             $table->string('name');
-            $table->string('email');
+            $table->string('email')->unique(); // Safety: email should be unique
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
