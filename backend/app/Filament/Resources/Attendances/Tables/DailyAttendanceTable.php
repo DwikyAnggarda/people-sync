@@ -79,8 +79,8 @@ class DailyAttendanceTable
                     ->trueLabel('Terlambat')
                     ->falseLabel('Tepat Waktu')
                     ->queries(
-                        true: fn ($query) => $query->whereRaw("clock_in_at > (date || ' ' || (SELECT work_start_time FROM work_schedules WHERE day_of_week = EXTRACT(DOW FROM date)))::timestamp"),
-                        false: fn ($query) => $query->whereRaw("clock_in_at <= (date || ' ' || (SELECT work_start_time FROM work_schedules WHERE day_of_week = EXTRACT(DOW FROM date)))::timestamp"),
+                        true: fn ($query) => $query->where('is_late', true),
+                        false: fn ($query) => $query->where('is_late', false),
                     ),
             ])
             ->recordActions([

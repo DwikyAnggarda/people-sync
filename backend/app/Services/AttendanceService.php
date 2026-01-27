@@ -210,4 +210,34 @@ class AttendanceService
     {
         return WorkSchedule::forDayOfWeek($date->dayOfWeek);
     }
+
+    /**
+     * Calculate is_late and late_duration_minutes for an attendance record.
+     *
+     * @return array{is_late: bool, late_duration_minutes: int}
+     */
+    public function calculateLateValues(Carbon $date, ?Carbon $clockInAt): array
+    {
+        $isLate = false;
+        $lateDurationMinutes = 0;
+
+        if (!$clockInAt) {
+            return ['is_late' => $isLate, 'late_duration_minutes' => $lateDurationMinutes];
+        }
+
+        $workSchedule = $this->getWorkSchedule($date);
+
+        if (!$workSchedule || !$workSchedule->is_working_day || !$workSchedule->work_start_time) {
+            return ['is_late' => $isLate, 'late_duration_minutes' => $lateDurationMinutes];
+        }
+
+        $expectedStartTime = Carbon::parse($date->format('Y-m-d') . ' ' . $workSchedule->work_start_time->format('H:i:s'));
+
+        if ($clockInAt->gt($expectedStartTime)) {
+            $isLate = true;
+            $lateDurationMinutes = (int) $expectedStartTime->diffInMinutes($clockInAt);
+        }
+
+        return ['is_late' => $isLate, 'late_duration_minutes' => $lateDurationMinutes];
+    }
 }

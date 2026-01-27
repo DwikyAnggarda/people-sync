@@ -15,8 +15,8 @@ class AttendanceResource extends JsonResource
         return [
             'id' => $this->id,
             'date' => $this->date->format('Y-m-d'),
-            'clock_in_at' => $this->clock_in_at?->toIso8601String(),
-            'clock_out_at' => $this->clock_out_at?->toIso8601String(),
+            'clock_in_at' => $this->clock_in_at?->format('Y-m-d H:i:s'),
+            'clock_out_at' => $this->clock_out_at?->format('Y-m-d H:i:s'),
             'is_late' => $this->is_late,
             'late_duration_minutes' => $this->late_duration_minutes,
             'late_duration_formatted' => $this->late_duration_formatted,

@@ -11,11 +11,13 @@ use App\Models\Attendance;
 use App\Models\Holiday;
 use App\Models\Location;
 use App\Models\WorkSchedule;
+use App\Services\AttendanceService;
 use App\Enums\AttendanceSource;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class AttendanceController extends Controller
@@ -122,6 +124,9 @@ class AttendanceController extends Controller
         $clockOutTimes = [];
 
         $currentDate = $startDate->copy();
+
+        \Log::info("currentdate", ['date' => $currentDate->toDateString(), 'enddate' => $endDate->toDateString()]);
+
         while ($currentDate <= $endDate) {
             $dayOfWeek = $currentDate->dayOfWeek;
             $dateStr = $currentDate->format('Y-m-d');
@@ -131,16 +136,23 @@ class AttendanceController extends Controller
             if ($schedule?->is_working_day && !in_array($dateStr, $holidays)) {
                 $totalWorkingDays++;
 
-                $attendance = $attendances->firstWhere('date', $currentDate->toDateString());
+                $attendance = $attendances->firstWhere(function($item) use ($dateStr) {
+                    return $item->date->format('Y-m-d') === $dateStr;
+                });
 
                 if ($attendance) {
                     $present++;
-                    if ($attendance->is_late) {
+                    
+                    // Check is_late safely - only count if attendance was clocked in
+                    if ($attendance->clock_in_at && $attendance->is_late === true) {
                         $late++;
                     }
-                    if ($attendance->work_duration_minutes) {
+                    
+                    // Only count work duration if both clock in and clock out exist
+                    if ($attendance->clock_in_at && $attendance->clock_out_at && $attendance->work_duration_minutes) {
                         $totalWorkMinutes += $attendance->work_duration_minutes;
                     }
+                    
                     if ($attendance->clock_in_at) {
                         $clockInTimes[] = $attendance->clock_in_at->format('H:i');
                     }
@@ -241,6 +253,9 @@ class AttendanceController extends Controller
 
         // Create attendance
         $attendance = DB::transaction(function () use ($employee, $today, $latitude, $longitude, $photoPath) {
+            $attendanceService = app(AttendanceService::class);
+            $lateValues = $attendanceService->calculateLateValues($today, now());
+
             return Attendance::create([
                 'employee_id' => $employee->id,
                 'date' => $today,
@@ -249,13 +264,15 @@ class AttendanceController extends Controller
                 'longitude' => $longitude,
                 'photo_path' => $photoPath,
                 'source' => AttendanceSource::Mobile,
+                'is_late' => $lateValues['is_late'],
+                'late_duration_minutes' => $lateValues['late_duration_minutes'],
             ]);
         });
 
         return $this->success([
             'id' => $attendance->id,
             'date' => $attendance->date->format('Y-m-d'),
-            'clock_in_at' => $attendance->clock_in_at->toIso8601String(),
+            'clock_in_at' => $attendance->clock_in_at->format('Y-m-d H:i:s'),
             'clock_out_at' => null,
             'is_late' => $attendance->is_late,
             'late_duration_minutes' => $attendance->late_duration_minutes,
@@ -304,6 +321,8 @@ class AttendanceController extends Controller
         $attendance = DB::transaction(function () use ($attendance, $latitude, $longitude, $photoPath) {
             $attendance->update([
                 'clock_out_at' => now(),
+                'latitude' => $latitude ?? $attendance->latitude,
+                'longitude' => $longitude ?? $attendance->longitude,
                 'photo_path' => $photoPath,
             ]);
 

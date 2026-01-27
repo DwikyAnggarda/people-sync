@@ -20,6 +20,8 @@ class Attendance extends Model
         'longitude',
         'source',
         'notes',
+        'is_late',
+        'late_duration_minutes',
     ];
 
     protected $casts = [
@@ -29,10 +31,10 @@ class Attendance extends Model
         'source' => AttendanceSource::class,
     ];
 
-    protected $appends = [
-        'is_late',
-        'late_duration_minutes',
-    ];
+    // protected $appends = [
+    //     'is_late',
+    //     'late_duration_minutes',
+    // ];
 
     public function employee(): BelongsTo
     {
@@ -51,11 +53,18 @@ class Attendance extends Model
 
     /**
      * Check if the employee clocked in late.
+     * Uses stored value if available, falls back to calculation for backward compatibility.
      */
     protected function isLate(): Attribute
     {
         return Attribute::make(
             get: function (): bool {
+                // Use stored value if available (column has data)
+                if ($this->attributes['is_late'] ?? null !== null) {
+                    return (bool) $this->attributes['is_late'];
+                }
+
+                // Fallback to calculation for backward compatibility
                 if (!$this->clock_in_at || !$this->date) {
                     return false;
                 }
@@ -75,11 +84,18 @@ class Attendance extends Model
 
     /**
      * Get the late duration in minutes.
+     * Uses stored value if available, falls back to calculation for backward compatibility.
      */
     protected function lateDurationMinutes(): Attribute
     {
         return Attribute::make(
             get: function (): int {
+                // Use stored value if available (column has data)
+                if ($this->attributes['late_duration_minutes'] ?? null !== null) {
+                    return (int) $this->attributes['late_duration_minutes'];
+                }
+
+                // Fallback to calculation for backward compatibility
                 if (!$this->is_late || !$this->clock_in_at || !$this->date) {
                     return 0;
                 }
