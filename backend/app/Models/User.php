@@ -50,11 +50,12 @@ class User extends Authenticatable implements JWTSubject, FilamentUser
         'email_verified_at' => 'datetime',
     ];
 
-    protected static function booted()
+    protected static function boot()
     {
+        parent::boot();
         static::creating(function ($model) {
-            if (! $model->getKey()) {
-                $model->{$model->getKeyName()} = (string) Str::uuid();
+            if (empty($model->{$model->getKeyName()})) {
+                $model->{$model->getKeyName()} = (string) \Illuminate\Support\Str::uuid();
             }
         });
     }
