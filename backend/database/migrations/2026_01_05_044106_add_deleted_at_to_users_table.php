@@ -13,28 +13,55 @@ return new class extends Migration {
 
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->softDeletes();
-        });
+        /**
+         * 1. Add soft deletes ONLY if missing
+         */
+        if (!Schema::hasColumn('users', 'deleted_at')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->softDeletes();
+            });
+        }
 
-        // DROP semua kemungkinan index unique email
-        DB::statement('DROP INDEX IF EXISTS users_email_unique');
-        DB::statement('DROP INDEX IF EXISTS users_email_key');
+        /**
+         * 2. Drop UNIQUE CONSTRAINT (not index!)
+         */
+        DB::statement('
+            ALTER TABLE users
+            DROP CONSTRAINT IF EXISTS users_email_unique
+        ');
 
-        // Buat partial unique index (PostgreSQL)
-        DB::statement("
-            CREATE UNIQUE INDEX users_email_unique
-            ON users(email)
+        /**
+         * 3. Create partial unique index (PostgreSQL best practice)
+         */
+        DB::statement('
+            CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique
+            ON users (email)
             WHERE deleted_at IS NULL
-        ");
+        ');
     }
 
     public function down(): void
     {
+        /**
+         * Remove partial unique index
+         */
         DB::statement('DROP INDEX IF EXISTS users_email_unique');
 
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropSoftDeletes();
-        });
+        /**
+         * Restore original unique constraint
+         */
+        DB::statement('
+            ALTER TABLE users
+            ADD CONSTRAINT users_email_unique UNIQUE (email)
+        ');
+
+        /**
+         * Remove soft deletes if present
+         */
+        if (Schema::hasColumn('users', 'deleted_at')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->dropSoftDeletes();
+            });
+        }
     }
 };
