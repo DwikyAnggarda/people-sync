@@ -5,8 +5,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
-return new class extends Migration
-{
+return new class extends Migration {
+    /**
+     * PostgreSQL / Neon must not run this migration in a transaction
+     */
+    public $withinTransaction = false;
+
     /**
      * Run the migrations.
      * 
@@ -23,7 +27,7 @@ return new class extends Migration
         Schema::table($tableNames['model_has_permissions'], function (Blueprint $table) use ($modelMorphKey) {
             // Drop the primary key first (includes model_id)
             $table->dropPrimary('model_has_permissions_permission_model_type_primary');
-            
+
             // Drop the index
             $table->dropIndex('model_has_permissions_model_id_model_type_index');
         });
@@ -34,7 +38,7 @@ return new class extends Migration
         Schema::table($tableNames['model_has_permissions'], function (Blueprint $table) use ($modelMorphKey) {
             // Recreate the index
             $table->index([$modelMorphKey, 'model_type'], 'model_has_permissions_model_id_model_type_index');
-            
+
             // Recreate the primary key
             $table->primary(['permission_id', $modelMorphKey, 'model_type'], 'model_has_permissions_permission_model_type_primary');
         });
@@ -43,7 +47,7 @@ return new class extends Migration
         Schema::table($tableNames['model_has_roles'], function (Blueprint $table) use ($modelMorphKey) {
             // Drop the primary key first (includes model_id)
             $table->dropPrimary('model_has_roles_role_model_type_primary');
-            
+
             // Drop the index
             $table->dropIndex('model_has_roles_model_id_model_type_index');
         });
@@ -54,7 +58,7 @@ return new class extends Migration
         Schema::table($tableNames['model_has_roles'], function (Blueprint $table) use ($modelMorphKey) {
             // Recreate the index
             $table->index([$modelMorphKey, 'model_type'], 'model_has_roles_model_id_model_type_index');
-            
+
             // Recreate the primary key
             $table->primary(['role_id', $modelMorphKey, 'model_type'], 'model_has_roles_role_model_type_primary');
         });

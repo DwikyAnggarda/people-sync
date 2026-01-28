@@ -6,6 +6,11 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
 return new class extends Migration {
+    /**
+     * PostgreSQL / Neon must not run this migration in a transaction
+     */
+    public $withinTransaction = false;
+
     public function up(): void
     {
         Schema::create('attendances', function (Blueprint $table) {
@@ -13,8 +18,8 @@ return new class extends Migration {
 
             // FK ke employees (BIGINT)
             $table->foreignId('employee_id')
-                    ->constrained()
-                    ->restrictOnDelete();
+                ->constrained()
+                ->restrictOnDelete();
 
             $table->date('date');
             $table->timestamp('clock_in_at');

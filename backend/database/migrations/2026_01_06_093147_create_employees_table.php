@@ -6,6 +6,11 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
 return new class extends Migration {
+    /**
+     * PostgreSQL / Neon must not run this migration in a transaction
+     */
+    public $withinTransaction = false;
+
     public function up(): void
     {
         Schema::create('employees', function (Blueprint $table) {
@@ -14,9 +19,9 @@ return new class extends Migration {
             // FK ke users (UUID)
             $table->uuid('user_id')->nullable();
             $table->foreign('user_id')
-                    ->references('id')
-                    ->on('users')
-                    ->nullOnDelete();
+                ->references('id')
+                ->on('users')
+                ->nullOnDelete();
 
             // business fields
             $table->string('employee_number');
@@ -25,8 +30,8 @@ return new class extends Migration {
 
             // FK ke departments (BIGINT)
             $table->foreignId('department_id')
-                    ->constrained()
-                    ->restrictOnDelete();
+                ->constrained()
+                ->restrictOnDelete();
 
             $table->string('status')->default('active');
             $table->date('joined_at')->nullable();

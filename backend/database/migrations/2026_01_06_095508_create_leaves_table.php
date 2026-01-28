@@ -5,6 +5,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
+    /**
+     * PostgreSQL / Neon must not run this migration in a transaction
+     */
+    public $withinTransaction = false;
+
     public function up(): void
     {
         Schema::create('leaves', function (Blueprint $table) {
@@ -12,8 +17,8 @@ return new class extends Migration {
 
             // FK ke employees (BIGINT)
             $table->foreignId('employee_id')
-                    ->constrained()
-                    ->restrictOnDelete();
+                ->constrained()
+                ->restrictOnDelete();
 
             // leave attributes
             $table->string('type'); // annual, sick, permission, unpaid
@@ -26,9 +31,9 @@ return new class extends Migration {
             // FK ke users (UUID) sebagai approver
             $table->uuid('approved_by')->nullable();
             $table->foreign('approved_by')
-                    ->references('id')
-                    ->on('users')
-                    ->nullOnDelete();
+                ->references('id')
+                ->on('users')
+                ->nullOnDelete();
 
             $table->timestamps();
             $table->softDeletes();

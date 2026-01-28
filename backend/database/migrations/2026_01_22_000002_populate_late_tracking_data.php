@@ -4,8 +4,12 @@ use App\Models\Attendance;
 use App\Services\AttendanceService;
 use Illuminate\Database\Migrations\Migration;
 
-return new class extends Migration
-{
+return new class extends Migration {
+    /**
+     * PostgreSQL / Neon must not run this migration in a transaction
+     */
+    public $withinTransaction = false;
+
     /**
      * Run the migrations.
      */

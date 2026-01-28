@@ -5,6 +5,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
+    /**
+     * PostgreSQL / Neon must not run this migration in a transaction
+     */
+    public $withinTransaction = false;
+
     public function up(): void
     {
         Schema::create('departments', function (Blueprint $table) {
@@ -13,9 +18,9 @@ return new class extends Migration {
 
             // self-referencing FK
             $table->foreignId('parent_id')
-                    ->nullable()
-                    ->constrained('departments')
-                    ->nullOnDelete();
+                ->nullable()
+                ->constrained('departments')
+                ->nullOnDelete();
 
             $table->timestamps();
             $table->softDeletes();
