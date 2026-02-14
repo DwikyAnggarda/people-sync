@@ -43,7 +43,7 @@ class EmployeesTable
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn(string $state): string => match ($state) {
                         'active' => 'success',
                         'inactive' => 'danger',
                         default => 'gray',
@@ -55,7 +55,7 @@ class EmployeesTable
                     ->falseIcon('heroicon-o-x-circle')
                     ->trueColor('success')
                     ->falseColor('danger')
-                    ->getStateUsing(fn ($record) => $record->user_id !== null),
+                    ->getStateUsing(fn($record) => $record->user_id !== null),
                 TextColumn::make('joined_at')
                     ->label('Joined Date')
                     ->date('d M Y')
@@ -97,10 +97,10 @@ class EmployeesTable
                     ->label('Create Account')
                     ->icon('heroicon-o-user-plus')
                     ->color('success')
-                    ->visible(fn ($record) => $record->user_id === null && $record->email !== null)
+                    ->visible(fn($record) => $record->user_id === null && $record->email !== null)
                     ->requiresConfirmation()
                     ->modalHeading('Create User Account')
-                    ->modalDescription(fn ($record) => "Create a user account for {$record->name} with email {$record->email}?")
+                    ->modalDescription(fn($record) => "Create a user account for {$record->name} with email {$record->email}?")
                     ->modalSubmitActionLabel('Create Account')
                     ->form([
                         TextInput::make('password')
@@ -113,7 +113,7 @@ class EmployeesTable
                     ])
                     ->action(function ($record, array $data) {
                         $employeeRole = Role::where('name', 'employee')->first();
-                        
+
                         if (!$employeeRole) {
                             Notification::make()
                                 ->title('Error')
@@ -144,10 +144,10 @@ class EmployeesTable
                     ->label('Reset Password')
                     ->icon('heroicon-o-key')
                     ->color('warning')
-                    ->visible(fn ($record) => $record->user_id !== null)
+                    ->visible(fn($record) => $record->user_id !== null)
                     ->requiresConfirmation()
                     ->modalHeading('Reset Password')
-                    ->modalDescription(fn ($record) => "Reset password for {$record->name}?")
+                    ->modalDescription(fn($record) => "Reset password for {$record->name}?")
                     ->modalSubmitActionLabel('Reset Password')
                     ->form([
                         TextInput::make('password')
@@ -173,10 +173,10 @@ class EmployeesTable
                     ->label('Remove Account')
                     ->icon('heroicon-o-user-minus')
                     ->color('danger')
-                    ->visible(fn ($record) => $record->user_id !== null)
+                    ->visible(fn($record) => $record->user_id !== null)
                     ->requiresConfirmation()
                     ->modalHeading('Remove User Account')
-                    ->modalDescription(fn ($record) => "This will delete the user account for {$record->name}. The employee record will be kept. This action cannot be undone.")
+                    ->modalDescription(fn($record) => "This will delete the user account for {$record->name}. The employee record will be kept. This action cannot be undone.")
                     ->modalSubmitActionLabel('Remove Account')
                     ->action(function ($record) {
                         $user = $record->user;
@@ -193,12 +193,15 @@ class EmployeesTable
             ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make()
-                        ->after(fn (Collection $records) => $records->each(fn ($record) => $record->user?->delete())),
+                        ->after(fn(Collection $records) => $records->each(fn($record) => $record->user?->delete())),
                     ForceDeleteBulkAction::make()
-                        ->after(fn (Collection $records) => $records->each(fn ($record) => $record->user?->forceDelete())),
+                        ->after(fn(Collection $records) => $records->each(fn($record) => $record->user?->forceDelete())),
                     RestoreBulkAction::make()
-                        ->after(fn (Collection $records) => $records->each(fn ($record) => $record->user?->restore())),
+                        ->after(fn(Collection $records) => $records->each(fn($record) => $record->user?->restore())),
                 ]),
-            ]);
+            ])
+            ->deferLoading()
+            ->defaultPaginationPageOption(10)
+            ->paginationPageOptions([10, 25]);
     }
 }

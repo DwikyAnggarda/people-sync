@@ -16,10 +16,13 @@ class LeaveForm
         return $schema
             ->components([
                 Select::make('employee_id')
-                    ->relationship('employee', 'name')
+                    ->label('Employee')
+                    ->options(fn() => \App\Models\Employee::query()
+                        ->where('status', 'active')
+                        ->orderBy('name')
+                        ->pluck('name', 'id'))
                     ->required()
-                    ->searchable()
-                    ->preload(),
+                    ->searchable(),
                 Select::make('type')
                     ->options([
                         'Cuti' => 'Cuti',
@@ -46,7 +49,7 @@ class LeaveForm
                     ->columnSpanFull(),
                 Placeholder::make('approved_by_name')
                     ->label('Approved By')
-                    ->content(fn ($record) => $record?->approver?->name ?? '-'),
+                    ->content(fn($record) => $record?->approver?->name ?? '-'),
             ]);
     }
 }

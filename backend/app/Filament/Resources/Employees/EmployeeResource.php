@@ -69,9 +69,4 @@ class EmployeeResource extends Resource
                 SoftDeletingScope::class,
             ]);
     }
-
-    public static function getNavigationBadge(): ?string
-    {
-        return static::getModel()::count();
-    }
 }

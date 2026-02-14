@@ -37,27 +37,32 @@ class OvertimesTable
                 TextColumn::make('duration')
                     ->label('Duration')
                     ->state(function ($record) {
-                        if (!$record->start_time || !$record->end_time) return '-';
+                        if (!$record->start_time || !$record->end_time)
+                            return '-';
                         try {
-                             $start = $record->start_time; 
-                             $end = $record->end_time;
-                             
-                             if (!($start instanceof Carbon)) $start = Carbon::parse($start);
-                             if (!($end instanceof Carbon)) $end = Carbon::parse($end);
+                            $start = $record->start_time;
+                            $end = $record->end_time;
 
-                             // Clone to avoid modifying original model attributes if they are mutable
-                             $start = $start->copy();
-                             $end = $end->copy();
+                            if (!($start instanceof Carbon))
+                                $start = Carbon::parse($start);
+                            if (!($end instanceof Carbon))
+                                $end = Carbon::parse($end);
 
-                             if ($end->lt($start)) {
-                                 $end->addDay();
-                             }
-                             return $end->diff($start)->format('%Hh %Im');
-                        } catch (\Exception $e) { return '-'; }
+                            // Clone to avoid modifying original model attributes if they are mutable
+                            $start = $start->copy();
+                            $end = $end->copy();
+
+                            if ($end->lt($start)) {
+                                $end->addDay();
+                            }
+                            return $end->diff($start)->format('%Hh %Im');
+                        } catch (\Exception $e) {
+                            return '-';
+                        }
                     }),
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn(string $state): string => match ($state) {
                         'approved' => 'success',
                         'rejected' => 'danger',
                         'pending' => 'warning',
@@ -65,7 +70,8 @@ class OvertimesTable
                     }),
                 TextColumn::make('approver.name')
                     ->label('Approved By')
-                    ->formatStateUsing(fn (?string $state, $record): string => 
+                    ->formatStateUsing(
+                        fn(?string $state, $record): string =>
                         $record?->status === 'approved' && $state ? $state : '-'
                     ),
             ])
@@ -86,11 +92,11 @@ class OvertimesTable
                         return $query
                             ->when(
                                 $data['date_from'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('date', '>=', $date),
+                                fn(Builder $query, $date): Builder => $query->whereDate('date', '>=', $date),
                             )
                             ->when(
                                 $data['date_until'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('date', '<=', $date),
+                                fn(Builder $query, $date): Builder => $query->whereDate('date', '<=', $date),
                             );
                     }),
             ])
@@ -103,6 +109,9 @@ class OvertimesTable
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),
                 ]),
-            ]);
+            ])
+            ->deferLoading()
+            ->defaultPaginationPageOption(10)
+            ->paginationPageOptions([10, 25]);
     }
 }

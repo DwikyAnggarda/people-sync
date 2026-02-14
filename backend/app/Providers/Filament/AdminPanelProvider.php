@@ -28,6 +28,8 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->spa(false)
+            ->databaseNotifications(false)
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -50,7 +52,6 @@ class AdminPanelProvider extends PanelProvider
                 VerifyCsrfToken::class,
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
-                DispatchServingFilamentEvent::class,
             ])
             ->authMiddleware([
                 Authenticate::class,

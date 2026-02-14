@@ -35,15 +35,15 @@ class DailyAttendanceTable
                     ->label('Jam Masuk')
                     ->dateTime('H:i')
                     ->sortable()
-                    ->description(fn ($record) => $record->is_late ? "Terlambat {$record->late_duration_formatted}" : null)
-                    ->color(fn ($record) => $record->is_late ? 'danger' : null),
+                    ->description(fn($record) => $record->is_late ? "Terlambat {$record->late_duration_formatted}" : null)
+                    ->color(fn($record) => $record->is_late ? 'danger' : null),
                 TextColumn::make('clock_out_at')
                     ->label('Jam Keluar')
                     ->dateTime('H:i')
                     ->placeholder('-')
                     ->sortable()
-                    ->description(fn ($record) => $record->is_early_leave ? "Pulang awal {$record->early_leave_duration_formatted}" : null)
-                    ->color(fn ($record) => $record->is_early_leave ? 'warning' : null),
+                    ->description(fn($record) => $record->is_early_leave ? "Pulang awal {$record->early_leave_duration_formatted}" : null)
+                    ->color(fn($record) => $record->is_early_leave ? 'warning' : null),
                 TextColumn::make('work_duration_formatted')
                     ->label('Durasi Kerja'),
                 IconColumn::make('is_late')
@@ -56,7 +56,7 @@ class DailyAttendanceTable
                 TextColumn::make('source')
                     ->label('Sumber')
                     ->badge()
-                    ->color(fn (AttendanceSource $state): string => match ($state) {
+                    ->color(fn(AttendanceSource $state): string => match ($state) {
                         AttendanceSource::Mobile => 'info',
                         AttendanceSource::Manual => 'warning',
                     }),
@@ -79,8 +79,8 @@ class DailyAttendanceTable
                     ->trueLabel('Terlambat')
                     ->falseLabel('Tepat Waktu')
                     ->queries(
-                        true: fn ($query) => $query->where('is_late', true),
-                        false: fn ($query) => $query->where('is_late', false),
+                        true: fn($query) => $query->where('is_late', true),
+                        false: fn($query) => $query->where('is_late', false),
                     ),
             ])
             ->recordActions([
@@ -91,6 +91,9 @@ class DailyAttendanceTable
                     DeleteBulkAction::make(),
                 ]),
             ])
-            ->defaultSort('date', 'desc');
+            ->defaultSort('date', 'desc')
+            ->deferLoading()
+            ->defaultPaginationPageOption(10)
+            ->paginationPageOptions([10, 25]);
     }
 }

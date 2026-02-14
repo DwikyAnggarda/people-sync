@@ -54,7 +54,7 @@ class ListAttendanceReviewDaily extends Page implements HasForms, HasTable
                     ->label('Pilih Tanggal')
                     ->default(now())
                     ->required()
-                    ->live()
+                    ->live(onBlur: true)
                     ->afterStateUpdated(function ($state) {
                         $this->selectedDate = $state;
                     }),
@@ -136,12 +136,14 @@ class ListAttendanceReviewDaily extends Page implements HasForms, HasTable
                     ->badge()
                     ->state(function ($record) use ($date) {
                         $attendance = \App\Models\Attendance::forEmployeeAndDate($record->id, $date);
-                        if (!$attendance) return '-';
+                        if (!$attendance)
+                            return '-';
                         return $attendance->is_late ? 'Terlambat' : 'Tepat Waktu';
                     })
                     ->color(function ($record) use ($date) {
                         $attendance = \App\Models\Attendance::forEmployeeAndDate($record->id, $date);
-                        if (!$attendance) return 'gray';
+                        if (!$attendance)
+                            return 'gray';
                         return $attendance->is_late ? 'danger' : 'success';
                     }),
                 TextColumn::make('leave_type')
@@ -166,8 +168,8 @@ class ListAttendanceReviewDaily extends Page implements HasForms, HasTable
                         };
                     }),
             ])
-            ->paginated([10, 25, 50, 100])
-            ->defaultPaginationPageOption(25);
+            ->paginationPageOptions([10, 25])
+            ->defaultPaginationPageOption(10);
     }
 
     public function getAttendanceStatistics(): array

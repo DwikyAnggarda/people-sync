@@ -53,7 +53,7 @@ class ListAttendanceReviewMonthly extends Page implements HasForms
                     ->label('Tanggal Mulai')
                     ->default(now()->startOfMonth())
                     ->required()
-                    ->live()
+                    ->live(onBlur: true)
                     ->afterStateUpdated(function ($state) {
                         $this->startDate = $state;
                     }),
@@ -61,7 +61,7 @@ class ListAttendanceReviewMonthly extends Page implements HasForms
                     ->label('Tanggal Akhir')
                     ->default(now()->endOfMonth())
                     ->required()
-                    ->live()
+                    ->live(onBlur: true)
                     ->afterStateUpdated(function ($state) {
                         $this->endDate = $state;
                     }),

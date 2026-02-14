@@ -35,7 +35,7 @@ class LeavesTable
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn(string $state): string => match ($state) {
                         'approved' => 'success',
                         'rejected' => 'danger',
                         'pending' => 'warning',
@@ -43,7 +43,8 @@ class LeavesTable
                     }),
                 TextColumn::make('approver.name')
                     ->label('Approved By')
-                    ->formatStateUsing(fn (?string $state, $record): string =>
+                    ->formatStateUsing(
+                        fn(?string $state, $record): string =>
                         $record?->status === 'approved' && $state ? $state : '-'
                     ),
             ])
@@ -64,11 +65,11 @@ class LeavesTable
                         return $query
                             ->when(
                                 $data['date_from'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('start_date', '>=', $date),
+                                fn(Builder $query, $date): Builder => $query->whereDate('start_date', '>=', $date),
                             )
                             ->when(
                                 $data['date_until'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('start_date', '<=', $date),
+                                fn(Builder $query, $date): Builder => $query->whereDate('start_date', '<=', $date),
                             );
                     }),
             ])
@@ -81,6 +82,9 @@ class LeavesTable
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),
                 ]),
-            ]);
+            ])
+            ->deferLoading()
+            ->defaultPaginationPageOption(10)
+            ->paginationPageOptions([10, 25]);
     }
 }
