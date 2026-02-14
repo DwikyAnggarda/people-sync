@@ -10,7 +10,6 @@ use Filament\Actions\RestoreAction;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class EditEmployee extends EditRecord
@@ -21,43 +20,41 @@ class EditEmployee extends EditRecord
     {
         return [
             DeleteAction::make()
-                ->after(fn ($record) => $record->user?->delete()),
+                ->after(fn($record) => $record->user?->delete()),
             ForceDeleteAction::make()
-                ->after(fn ($record) => $record->user?->forceDelete()),
+                ->after(fn($record) => $record->user?->forceDelete()),
             RestoreAction::make()
-                ->after(fn ($record) => $record->user?->restore()),
+                ->after(fn($record) => $record->user?->restore()),
         ];
     }
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        return DB::transaction(function () use ($record, $data) {
-            // Update User
-            /** @var User $user */
-            $user = $record->user;
+        // Update User (no transaction — PostgreSQL on Koyeb poisons transactions between slow queries)
+        /** @var User $user */
+        $user = $record->user;
 
-            if ($user) {
-                $userUpdateData = [
-                    'name' => $data['name'],
-                    'email' => $data['email'],
-                ];
+        if ($user) {
+            $userUpdateData = [
+                'name' => $data['name'],
+                'email' => $data['email'],
+            ];
 
-                if (filled($data['password'] ?? null)) {
-                    $userUpdateData['password'] = Hash::make($data['password']);
-                }
-
-                $user->update($userUpdateData);
-
-                if (isset($data['role'])) {
-                    $user->syncRoles([$data['role']]);
-                }
+            if (filled($data['password'] ?? null)) {
+                $userUpdateData['password'] = Hash::make($data['password']);
             }
 
-            // Update Employee
-            $employeeData = Arr::except($data, ['password', 'role']);
-            $record->update($employeeData);
+            $user->update($userUpdateData);
 
-            return $record;
-        });
+            if (isset($data['role'])) {
+                $user->syncRoles([$data['role']]);
+            }
+        }
+
+        // Update Employee
+        $employeeData = Arr::except($data, ['password', 'role']);
+        $record->update($employeeData);
+
+        return $record;
     }
 }
